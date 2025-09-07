@@ -123,8 +123,10 @@ class MuniLTaravalDisplay:
         self.animation_active = False
         self.animation_frame = 0
         self.animation_total_frames = 120  # Total frames for animation (6 seconds at 20fps)
+        self.animation_phase = "entering"  # "exiting" or "entering"
         self.current_arrivals = []  # Track current arrivals to detect changes
         self.start_time = time.time()  # Track startup time for test trigger
+        self.old_arrival_text = ""  # Store old arrival text for exit animation
 
     def _load_config(self, config_file):
         """Load configuration from muni.config file."""
@@ -265,11 +267,33 @@ class MuniLTaravalDisplay:
         # If even a single character doesn't fit, return empty string
         return ""
 
-    def start_update_animation(self):
+    def get_arrival_text_and_color(self):
+        """Get the current arrival text and appropriate color."""
+        if not self.current_arrivals or len(self.current_arrivals) == 0:
+            return "NO DATA", (255, 255, 0)
+
+        minutes = self.current_arrivals[0]['minutes']
+        if minutes == 0:
+            return "NOW", (255, 0, 0)  # Red - immediate/urgent
+        elif minutes == 1:
+            return "1 MIN", (255, 0, 0)  # Red - immediate/urgent
+        elif minutes <= 5:
+            return f"{minutes} MIN", (255, 128, 0)  # Orange - soon
+        else:
+            return f"{minutes} MIN", (0, 255, 0)  # Green - later
+
+    def start_update_animation(self, is_initial_load=False):
         """Start the train animation for bringing in new arrival data."""
         self.animation_active = True
         self.animation_frame = 0
-        print("🚂 Train animation started - towing next arrival time!")
+
+        # If there's already a train parked (not initial load), start with exit animation
+        if not is_initial_load and hasattr(self, 'old_arrival_text') and self.old_arrival_text:
+            self.animation_phase = "exiting"
+            print("🚂 Train animation started - old train exiting, new train incoming!")
+        else:
+            self.animation_phase = "entering"
+            print("🚂 Train animation started - towing next arrival time!")
 
     def draw_train_image(self, x, y):
         """Draw a pixel art MUNI train car facing left with classic grey/red colors."""
@@ -312,26 +336,43 @@ class MuniLTaravalDisplay:
                         )
 
     def draw_animated_train_update(self):
-        """Draw the animated train towing the next arrival time across the screen."""
-        # Calculate train position (moves from right to left, parks at left edge)
-        progress = self.animation_frame / self.animation_total_frames
-        start_x = 64  # Start off-screen right
-        end_x = 1     # End at left edge with 1-pixel buffer
-        train_x = int(start_x - ((start_x - end_x) * progress))
+        """Draw the animated train towing arrival times across the screen."""
+        if self.animation_phase == "exiting":
+            # Old train exits from parked position to off-screen left
+            progress = self.animation_frame / (self.animation_total_frames // 2)  # Half duration for exit
+            start_x = 1   # Start from parked position
+            end_x = -20   # Exit off-screen left
+            train_x = int(start_x - ((start_x - end_x) * progress))
 
-        # Get the next arrival time to display
-        next_arrival_text = "NO DATA"
-        if self.current_arrivals and len(self.current_arrivals) > 0:
-            minutes = self.current_arrivals[0]['minutes']
-            if minutes == 0:
-                next_arrival_text = "NOW"
-            elif minutes == 1:
-                next_arrival_text = "1MIN"
+            # Use old arrival text and color
+            arrival_text = self.old_arrival_text
+            text_color = (128, 128, 128)  # Grey for exiting text
+
+        else:  # entering phase
+            # New train enters from right and parks at left
+            if self.animation_phase == "entering" and self.animation_frame == 0:
+                # Just switched to entering phase, reset frame count
+                pass
+
+            # Calculate progress for entering phase
+            if self.animation_phase == "entering":
+                enter_start_frame = self.animation_total_frames // 2 if hasattr(self, 'old_arrival_text') and self.old_arrival_text else 0
+                progress = (self.animation_frame - enter_start_frame) / (self.animation_total_frames // 2)
             else:
-                next_arrival_text = f"{minutes}MIN"
+                progress = self.animation_frame / self.animation_total_frames
 
-        # Calculate positioning with train aligned with text
-        text_y = 18      # Text position
+            start_x = 64  # Start off-screen right
+            end_x = 1     # End at left edge with 1-pixel buffer
+            train_x = int(start_x - ((start_x - end_x) * progress))
+
+            # Get new arrival text and color
+            arrival_text, text_color = self.get_arrival_text_and_color()
+
+        # Use the arrival text determined by the animation phase
+        next_arrival_text = arrival_text
+
+        # Calculate positioning with train aligned with text (moved up)
+        text_y = 12      # Text position (moved up from 18)
         train_y = text_y  # Train aligned with text
 
         # Draw the moving train
@@ -344,16 +385,29 @@ class MuniLTaravalDisplay:
 
             # Only draw text if it's on screen
             if text_x < 64:
-                self.draw_text_pixels(arrival_pixels, text_x, text_y, (255, 255, 0))  # Yellow text
+                self.draw_text_pixels(arrival_pixels, text_x, text_y, text_color)  # Color-coded text
 
         # Advance animation
         self.animation_frame += 1
         if self.animation_frame % 20 == 0:  # Debug every 20 frames
-            print(f"🎬 Animation frame {self.animation_frame}/{self.animation_total_frames} (train at x={train_x})")
+            print(f"🎬 Animation {self.animation_phase} frame {self.animation_frame}/{self.animation_total_frames} (train at x={train_x})")
 
-        if self.animation_frame >= self.animation_total_frames:
+        # Handle phase transitions
+        if self.animation_phase == "exiting" and self.animation_frame >= self.animation_total_frames // 2:
+            # Switch to entering phase
+            self.animation_phase = "entering"
+            self.animation_frame = self.animation_total_frames // 2  # Start entering phase
+            print("🔄 Switching to entering phase - new train incoming!")
+        elif self.animation_frame >= self.animation_total_frames:
+            # Animation complete
             self.animation_active = False
             self.animation_frame = 0
+            self.animation_phase = "entering"  # Reset for next time
+
+            # Store current arrival text for next exit animation
+            if self.current_arrivals and len(self.current_arrivals) > 0:
+                self.old_arrival_text, _ = self.get_arrival_text_and_color()
+
             print("🚂 Train animation completed!")
 
     def display_arrivals(self):
@@ -382,10 +436,10 @@ class MuniLTaravalDisplay:
 
         # Start animation for new data, initial load, or test trigger
         if (is_new_data or is_initial_load) and not self.animation_active:
-            self.start_update_animation()
+            self.start_update_animation(is_initial_load=is_initial_load)
         elif is_test_trigger:
             print("🧪 Test trigger: Starting animation 30 seconds after startup!")
-            self.start_update_animation()
+            self.start_update_animation(is_initial_load=False)
         
         # Display format: "L-TARAVAL  3min  8min  15min"
         if hasattr(self.controller, 'canvas') and self.controller.canvas:
@@ -404,24 +458,8 @@ class MuniLTaravalDisplay:
             header_pixels = self.create_text_pixels(header_text)
             self.draw_text_pixels(header_pixels, 1, 2, self.line_color)
 
-            # Arrival times
-            y_pos = 12
-            colors = [(255, 0, 0), (255, 128, 0), (0, 255, 255)]  # Red, Orange, Cyan
-            
-            for i, arrival in enumerate(arrivals[:3]):
-                if arrival['minutes'] == 0:
-                    text = "NOW"
-                elif arrival['minutes'] == 1:
-                    text = "1MIN"
-                else:
-                    text = f"{arrival['minutes']}MIN"
-                
-                text_pixels = self.create_text_pixels(text)
-                x_pos = 2 + (i * 20)  # Space arrivals across the display
-                text_width = self.get_text_width(text_pixels)
-
-                if x_pos + text_width <= 64:  # Make sure it fits
-                    self.draw_text_pixels(text_pixels, x_pos, y_pos, colors[i])
+            # Arrival times are shown via animation only
+            # No static display - users see arrival info when train delivers it
             
             # Handle train animation or static display
             if self.animation_active:
