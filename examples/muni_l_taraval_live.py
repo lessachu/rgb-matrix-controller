@@ -119,6 +119,13 @@ class MuniLTaravalDisplay:
         self.direction_id = 1 if config_direction.lower() == 'inbound' else 0
         self.direction_display = "I" if config_direction.lower() == 'inbound' else "O"
 
+        # Animation state for train towing updates
+        self.animation_active = False
+        self.animation_frame = 0
+        self.animation_total_frames = 120  # Total frames for animation (6 seconds at 20fps)
+        self.current_arrivals = []  # Track current arrivals to detect changes
+        self.start_time = time.time()  # Track startup time for test trigger
+
     def _load_config(self, config_file):
         """Load configuration from muni.config file."""
         config = {}
@@ -258,6 +265,12 @@ class MuniLTaravalDisplay:
         # If even a single character doesn't fit, return empty string
         return ""
 
+    def start_update_animation(self):
+        """Start the train animation for bringing in new arrival data."""
+        self.animation_active = True
+        self.animation_frame = 0
+        print("🚂 Train animation started - towing next arrival time!")
+
     def draw_train_image(self, x, y):
         """Draw a pixel art MUNI train car facing left with classic grey/red colors."""
         # MUNI train car (16x8 pixels) - facing left
@@ -298,13 +311,81 @@ class MuniLTaravalDisplay:
                             color[0], color[1], color[2]
                         )
 
+    def draw_animated_train_update(self):
+        """Draw the animated train towing the next arrival time across the screen."""
+        # Calculate train position (moves from right to left, parks at left edge)
+        progress = self.animation_frame / self.animation_total_frames
+        start_x = 64  # Start off-screen right
+        end_x = 1     # End at left edge with 1-pixel buffer
+        train_x = int(start_x - ((start_x - end_x) * progress))
+
+        # Get the next arrival time to display
+        next_arrival_text = "NO DATA"
+        if self.current_arrivals and len(self.current_arrivals) > 0:
+            minutes = self.current_arrivals[0]['minutes']
+            if minutes == 0:
+                next_arrival_text = "NOW"
+            elif minutes == 1:
+                next_arrival_text = "1MIN"
+            else:
+                next_arrival_text = f"{minutes}MIN"
+
+        # Calculate positioning with train aligned with text
+        text_y = 18      # Text position
+        train_y = text_y  # Train aligned with text
+
+        # Draw the moving train
+        self.draw_train_image(train_x, train_y)
+
+        # Draw arrival time being towed behind the train
+        if train_x < 80:  # Only show text when train is partially visible
+            arrival_pixels = self.create_text_pixels(next_arrival_text)
+            text_x = train_x + 18  # Position text behind the train (train is 16px wide)
+
+            # Only draw text if it's on screen
+            if text_x < 64:
+                self.draw_text_pixels(arrival_pixels, text_x, text_y, (255, 255, 0))  # Yellow text
+
+        # Advance animation
+        self.animation_frame += 1
+        if self.animation_frame % 20 == 0:  # Debug every 20 frames
+            print(f"🎬 Animation frame {self.animation_frame}/{self.animation_total_frames} (train at x={train_x})")
+
+        if self.animation_frame >= self.animation_total_frames:
+            self.animation_active = False
+            self.animation_frame = 0
+            print("🚂 Train animation completed!")
+
     def display_arrivals(self):
         """Display arrival information on the matrix."""
         arrivals = self.get_demo_data()  # Using demo data for now
-        
+
+        # Check if this is new data (different from current) or initial load
+        is_new_data = arrivals != self.current_arrivals
+        is_initial_load = len(self.current_arrivals) == 0
+
+        # Test trigger: Force animation 30 seconds after startup
+        current_time = time.time()
+        is_test_trigger = (current_time - self.start_time > 29 and
+                          current_time - self.start_time < 35 and
+                          not self.animation_active)
+
+        # Debug: Print timing info
+        if current_time - self.start_time > 29 and current_time - self.start_time < 35:
+            print(f"🕐 Debug: {current_time - self.start_time:.1f}s since startup, test_trigger={is_test_trigger}")
+
+        self.current_arrivals = arrivals
+
         if not arrivals:
             self.display_no_data()
             return
+
+        # Start animation for new data, initial load, or test trigger
+        if (is_new_data or is_initial_load) and not self.animation_active:
+            self.start_update_animation()
+        elif is_test_trigger:
+            print("🧪 Test trigger: Starting animation 30 seconds after startup!")
+            self.start_update_animation()
         
         # Display format: "L-TARAVAL  3min  8min  15min"
         if hasattr(self.controller, 'canvas') and self.controller.canvas:
@@ -342,14 +423,18 @@ class MuniLTaravalDisplay:
                 if x_pos + text_width <= 64:  # Make sure it fits
                     self.draw_text_pixels(text_pixels, x_pos, y_pos, colors[i])
             
-            # MUNI train image in bottom area
-            self.draw_train_image(24, 18)  # Centered horizontally, bottom area
+            # Handle train animation or static display
+            if self.animation_active:
+                self.draw_animated_train_update()
+            else:
+                # MUNI train image in bottom area (static)
+                self.draw_train_image(24, 18)  # Centered horizontally, bottom area
 
-            # Update timestamp at bottom
-            if self.last_update:
-                update_text = f"UPD {self.last_update.strftime('%H:%M')}"
-                update_pixels = self.create_text_pixels(update_text)
-                self.draw_text_pixels(update_pixels, 1, 25, (100, 100, 100))
+                # Update timestamp at bottom
+                if self.last_update:
+                    update_text = f"UPD {self.last_update.strftime('%H:%M')}"
+                    update_pixels = self.create_text_pixels(update_text)
+                    self.draw_text_pixels(update_pixels, 1, 25, (100, 100, 100))
 
             self.controller.canvas = self.controller.matrix.SwapOnVSync(self.controller.canvas)
     
@@ -408,9 +493,13 @@ class MuniLTaravalDisplay:
             while self.running:
                 print(f"🔄 Updating arrivals... ({datetime.now().strftime('%H:%M:%S')})")
                 self.display_arrivals()
-                
-                # Update every 30 seconds
-                time.sleep(30)
+
+                # If animation is active, update more frequently for smooth animation
+                if self.animation_active:
+                    time.sleep(0.05)  # 20 FPS during animation
+                else:
+                    # Update every 30 seconds when not animating
+                    time.sleep(30)
                 
         except KeyboardInterrupt:
             print("\n🛑 MUNI display stopped by user")
