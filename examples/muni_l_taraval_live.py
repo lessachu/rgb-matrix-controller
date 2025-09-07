@@ -103,6 +103,12 @@ class MuniLTaravalDisplay:
         self.current_stop = config_stop_name if config_stop_name in self.stops else "Taraval/17th"
         self.current_stop_id = self.stops[self.current_stop]
 
+        # Load direction from config file, fallback to default
+        config_direction = self.config.get('DIRECTION', 'Inbound')
+        self.direction = config_direction
+        self.direction_id = 1 if config_direction.lower() == 'inbound' else 0
+        self.direction_display = "IB" if config_direction.lower() == 'inbound' else "OB"
+
     def _load_config(self, config_file):
         """Load configuration from muni.config file."""
         config = {}
@@ -140,21 +146,30 @@ class MuniLTaravalDisplay:
     def get_demo_data(self):
         """Generate demo arrival data for testing."""
         now = datetime.now()
+
+        # Generate direction-specific destinations
+        if self.direction.lower() == 'inbound':
+            # Inbound trains go toward downtown
+            destinations = ['Embarcadero', 'Montgomery', 'Powell', 'Civic Center']
+        else:
+            # Outbound trains go toward SF Zoo
+            destinations = ['SF Zoo', 'Taraval/46th', 'Sunset Blvd']
+
         demo_arrivals = [
             {
-                'destination': 'Embarcadero',
+                'destination': destinations[0],
                 'minutes': 3,
                 'vehicle': 'L1234',
                 'time': (now + timedelta(minutes=3)).strftime('%H:%M')
             },
             {
-                'destination': 'SF Zoo',
+                'destination': destinations[1] if len(destinations) > 1 else destinations[0],
                 'minutes': 8,
                 'vehicle': 'L5678',
                 'time': (now + timedelta(minutes=8)).strftime('%H:%M')
             },
             {
-                'destination': 'Embarcadero',
+                'destination': destinations[0],
                 'minutes': 15,
                 'vehicle': 'L9012',
                 'time': (now + timedelta(minutes=15)).strftime('%H:%M')
@@ -192,7 +207,7 @@ class MuniLTaravalDisplay:
             '8': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
             '9': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,1],[0,0,0,0,1],[0,0,0,0,1],[0,1,1,1,0]],
             ':': [[0,0,0,0,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,0,0,0]],
-            ' ': [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]
+            ' ': [[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]  # Thinner space (2 pixels wide)
         }
         
         text_pixels = []
@@ -203,7 +218,17 @@ class MuniLTaravalDisplay:
                 text_pixels.append(font_patterns[' '])
         
         return text_pixels
-    
+
+    def get_text_width(self, text_pixels):
+        """Calculate the total width of text including variable-width characters."""
+        total_width = 0
+        for i, char_pixels in enumerate(text_pixels):
+            char_width = len(char_pixels[0])
+            total_width += char_width
+            if i < len(text_pixels) - 1:  # Add space between characters (except last)
+                total_width += 1
+        return total_width
+
     def display_arrivals(self):
         """Display arrival information on the matrix."""
         arrivals = self.get_demo_data()  # Using demo data for now
@@ -219,12 +244,12 @@ class MuniLTaravalDisplay:
             # Header: "L-TARAVAL" in purple (official MUNI line color)
             header_pixels = self.create_text_pixels("L-TARAVAL")
             self.draw_text_pixels(header_pixels, 1, 2, self.line_color)
-            
-            # Current time in top right
-            current_time = datetime.now().strftime("%H:%M")
-            time_pixels = self.create_text_pixels(current_time)
-            self.draw_text_pixels(time_pixels, 64 - len(time_pixels) * 6, 2, (255, 255, 0))
-            
+
+            # Direction indicator in top right
+            direction_pixels = self.create_text_pixels(self.direction_display)
+            direction_width = self.get_text_width(direction_pixels)
+            self.draw_text_pixels(direction_pixels, 64 - direction_width, 2, (255, 255, 255))
+
             # Arrival times
             y_pos = 12
             colors = [(255, 0, 0), (255, 128, 0), (0, 255, 255)]  # Red, Orange, Cyan
@@ -239,8 +264,9 @@ class MuniLTaravalDisplay:
                 
                 text_pixels = self.create_text_pixels(text)
                 x_pos = 2 + (i * 20)  # Space arrivals across the display
-                
-                if x_pos + len(text_pixels) * 6 <= 64:  # Make sure it fits
+                text_width = self.get_text_width(text_pixels)
+
+                if x_pos + text_width <= 64:  # Make sure it fits
                     self.draw_text_pixels(text_pixels, x_pos, y_pos, colors[i])
             
             # Update timestamp at bottom
@@ -254,21 +280,22 @@ class MuniLTaravalDisplay:
     def draw_text_pixels(self, text_pixels, start_x, start_y, color):
         """Draw text pixels on the canvas."""
         char_x = start_x
-        
+
         for char_pixels in text_pixels:
+            char_width = len(char_pixels[0])  # Get actual width of this character
             for y in range(7):
-                for x in range(5):
+                for x in range(char_width):
                     if char_pixels[y][x] == 1:
                         pixel_x = char_x + x
                         pixel_y = start_y + y
-                        
+
                         if 0 <= pixel_x < 64 and 0 <= pixel_y < 32:
                             self.controller.canvas.SetPixel(
                                 pixel_x, pixel_y,
                                 color[0], color[1], color[2]
                             )
-            
-            char_x += 6  # Move to next character position
+
+            char_x += char_width + 1  # Move to next character position (character width + 1 space)
     
     def display_no_data(self):
         """Display when no arrival data is available."""
@@ -285,6 +312,7 @@ class MuniLTaravalDisplay:
         print("🚇 MUNI L-Taraval Real-time Display")
         print("=" * 40)
         print(f"📍 Stop: {self.current_stop}")
+        print(f"🧭 Direction: {self.direction} ({self.direction_display})")
         print(f"🎨 Line Color: Purple RGB{self.line_color}")
         print("🌐 Emulator URL: http://localhost:8888/")
         
