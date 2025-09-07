@@ -1,0 +1,57 @@
+# RGB Matrix Controller Configuration
+
+matrix:
+  # Matrix dimensions
+  rows: 32              # Number of rows (16, 32, 64)
+  cols: 64              # Number of columns (32, 64, 128)
+  
+  # Chaining (for multiple panels)
+  chain_length: 1       # Number of panels chained horizontally
+  parallel: 1           # Number of parallel chains
+  
+  # Display settings
+  brightness: 50        # Brightness level (0-100)
+  hardware_mapping: "adafruit-hat"  # Hardware mapping type
+  
+  # Advanced settings
+  gpio_slowdown: 1      # GPIO slowdown (1-4, higher = slower but more stable)
+  pwm_bits: 11          # PWM bits (1-11, higher = better color depth)
+  pwm_lsb_nanoseconds: 130  # PWM LSB nanoseconds
+
+display:
+  # Font settings
+  default_font: "assets/fonts/6x10.bdf"
+  
+  # Animation settings
+  scroll_speed: 0.05    # Scroll delay in seconds (lower = faster)
+  fade_speed: 0.02      # Fade transition speed
+  
+  # Color settings
+  default_color: [255, 255, 255]  # Default text color (RGB)
+  background_color: [0, 0, 0]     # Background color (RGB)
+
+web:
+  # Web interface settings
+  host: "0.0.0.0"       # Host to bind to (0.0.0.0 = all interfaces)
+  port: 5000            # Port number
+  debug: false          # Enable debug mode
+
+weather:
+  # Weather API settings (optional)
+  api_key: "your_openweather_api_key_here"
+  city: "San Francisco"
+  units: "metric"       # metric, imperial, or kelvin
+  update_interval: 600  # Update interval in seconds (10 minutes)
+
+clock:
+  # Clock display settings
+  format: "24h"         # 12h or 24h
+  show_seconds: true    # Show seconds
+  color: [0, 255, 0]    # Clock color (RGB)
+  
+news:
+  # News ticker settings (optional)
+  api_key: "your_news_api_key_here"
+  sources: ["bbc-news", "cnn", "reuters"]
+  update_interval: 1800 # Update interval in seconds (30 minutes)
+  max_headlines: 5      # Maximum number of headlines to cycle through
