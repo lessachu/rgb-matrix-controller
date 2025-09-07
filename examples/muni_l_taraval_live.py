@@ -630,66 +630,74 @@ class MuniLTaravalDisplay:
 
     def draw_animated_train_update(self):
         """Draw the animated train towing arrival times across the screen."""
-        if self.animation_phase == "exiting":
-            # Old train exits from parked position to off-screen left
-            progress = self.animation_frame / (self.animation_total_frames // 2)  # Half duration for exit
-            start_x = 1   # Start from parked position
-            end_x = -20   # Exit off-screen left
-            train_x = int(start_x - ((start_x - end_x) * progress))
-
-            # Use old arrival text and preserve original color
-            arrival_text = self.old_arrival_text
-            text_color = self.old_arrival_color  # Preserve original color during exit
-
-        else:  # entering phase
-            # New train enters from right and parks at left
-            if self.animation_phase == "entering" and self.animation_frame == 0:
-                # Just switched to entering phase, reset frame count
-                pass
-
-            # Calculate progress for entering phase
-            if self.animation_phase == "entering":
-                if hasattr(self, 'old_arrival_text') and self.old_arrival_text:
-                    # This is a subsequent update with exit phase - use second half of animation
-                    enter_start_frame = self.animation_total_frames // 2
-                    progress = (self.animation_frame - enter_start_frame) / (self.animation_total_frames // 2)
-                else:
-                    # This is initial load - use full duration
-                    progress = self.animation_frame / self.animation_total_frames
-            else:
-                progress = self.animation_frame / self.animation_total_frames
-
-            start_x = 64  # Start off-screen right
-            end_x = 1     # End at left edge with 1-pixel buffer
-            train_x = int(start_x - ((start_x - end_x) * progress))
-
-            # Use persistent display state
-            arrival_text = self.display_arrival_text
-            text_color = self.display_arrival_color
-
-        # Use the arrival text determined by the animation phase
-        next_arrival_text = arrival_text
-
-        # Calculate positioning with train aligned with text (moved up)
-        text_y = 12      # Text position (moved up from 18)
+        text_y = 12      # Text position
         train_y = text_y  # Train aligned with text
 
-        # Draw the moving train
-        self.draw_train_image(train_x, train_y)
+        # Calculate the effective length of train + text for proper exit timing
+        has_old_train = hasattr(self, 'old_arrival_text') and self.old_arrival_text
 
-        # Draw arrival time being towed behind the train
-        if train_x < 80:  # Only show text when train is partially visible
-            arrival_pixels = self.create_text_pixels(next_arrival_text)
-            text_x = train_x + 18  # Position text behind the train (train is 16px wide)
+        if has_old_train:
+            # Calculate old train + text length
+            old_text_pixels = self.create_text_pixels(self.old_arrival_text)
+            old_text_width = self.get_text_width(old_text_pixels)
+            old_total_length = 16 + 2 + old_text_width  # train + gap + text
+        else:
+            old_total_length = 16  # Just train width
 
-            # Only draw text if it's on screen
-            if text_x < 64:
-                self.draw_text_pixels(arrival_pixels, text_x, text_y, text_color)  # Color-coded text
+        # Calculate new train + text length
+        new_text_pixels = self.create_text_pixels(self.display_arrival_text)
+        new_text_width = self.get_text_width(new_text_pixels)
+        new_total_length = 16 + 2 + new_text_width  # train + gap + text
+
+        # Determine when old train is fully off-screen (including its text)
+        old_train_clear_x = -old_total_length
+
+        if self.animation_phase == "exiting":
+            # Old train exits from parked position until completely off-screen
+            exit_progress = self.animation_frame / (self.animation_total_frames // 2)
+            exit_start_x = 1   # Start from parked position
+            exit_end_x = old_train_clear_x  # Exit until text is completely off-screen
+            old_train_x = int(exit_start_x - ((exit_start_x - exit_end_x) * exit_progress))
+
+            # Draw old train if still visible (allow some off-screen drawing)
+            if old_train_x > -20:
+                self.draw_train_image(old_train_x, train_y)
+
+            # Always draw old arrival text being towed (even if train is off-screen)
+            old_text_x = old_train_x + 18  # Position text behind the train
+            # Draw text as long as any part might be visible (be generous with the boundary)
+            if old_text_x > -(old_text_width + 5):  # Add buffer to ensure smooth exit
+                self.draw_text_pixels(old_text_pixels, old_text_x, text_y, self.old_arrival_color)
+
+        elif self.animation_phase == "entering":
+            # New train enters from right and parks at left
+            if has_old_train:
+                # This is a subsequent update - use second half of animation
+                enter_start_frame = self.animation_total_frames // 2
+                enter_progress = (self.animation_frame - enter_start_frame) / (self.animation_total_frames // 2)
+                enter_progress = max(0.0, enter_progress)  # Don't start before halfway
+            else:
+                # This is initial load - use full duration
+                enter_progress = self.animation_frame / self.animation_total_frames
+
+            if enter_progress > 0.0:
+                enter_start_x = 64 + new_total_length  # Start completely off-screen right
+                enter_end_x = 1     # End at left edge
+                new_train_x = int(enter_start_x - ((enter_start_x - enter_end_x) * enter_progress))
+
+                # Draw new train if visible
+                if new_train_x < 64:
+                    self.draw_train_image(new_train_x, train_y)
+
+                # Draw new arrival text being towed
+                new_text_x = new_train_x + 18  # Position text behind the train
+                if new_text_x < 64 and new_train_x < 80:  # Only show text when train is partially visible
+                    self.draw_text_pixels(new_text_pixels, new_text_x, text_y, self.display_arrival_color)
 
         # Advance animation
         self.animation_frame += 1
         if self.animation_frame % 20 == 0:  # Debug every 20 frames
-            print(f"🎬 Animation {self.animation_phase} frame {self.animation_frame}/{self.animation_total_frames} (train at x={train_x})")
+            print(f"🎬 Animation {self.animation_phase} frame {self.animation_frame}/{self.animation_total_frames}")
 
         # Handle phase transitions
         if self.animation_phase == "exiting" and self.animation_frame >= self.animation_total_frames // 2:
