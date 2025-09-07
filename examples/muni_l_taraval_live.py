@@ -33,9 +33,19 @@ class MuniLTaravalDisplay:
         # Load configuration from file
         self.config = self._load_config(config_file)
 
-        # MUNI L-Taraval line configuration
+        # MUNI line configuration
         self.agency = "SF"  # San Francisco MUNI
-        self.line_id = "L"  # L-Taraval line
+
+        # Load line from config file, fallback to default
+        config_line = self.config.get('LINE', 'L-Taraval')
+        self.line_name = config_line
+        # Extract line ID (first character before space or dash)
+        if ' ' in config_line:
+            self.line_id = config_line.split(' ')[0]
+        elif '-' in config_line:
+            self.line_id = config_line.split('-')[0]
+        else:
+            self.line_id = config_line[0] if config_line else "L"
 
         # MUNI Line Color Table (RGB values)
         self.muni_line_colors = {
@@ -107,7 +117,7 @@ class MuniLTaravalDisplay:
         config_direction = self.config.get('DIRECTION', 'Inbound')
         self.direction = config_direction
         self.direction_id = 1 if config_direction.lower() == 'inbound' else 0
-        self.direction_display = "IB" if config_direction.lower() == 'inbound' else "OB"
+        self.direction_display = "I" if config_direction.lower() == 'inbound' else "O"
 
     def _load_config(self, config_file):
         """Load configuration from muni.config file."""
@@ -194,6 +204,7 @@ class MuniLTaravalDisplay:
             'U': [[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
             'W': [[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,1,0,1],[1,0,1,0,1],[1,1,0,1,1],[1,0,0,0,1]],
             'O': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+            'C': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,1],[0,1,1,1,0]],
             'D': [[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,0]],
             'P': [[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0]],
             '0': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,1,1],[1,0,1,0,1],[1,1,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
@@ -206,6 +217,7 @@ class MuniLTaravalDisplay:
             '7': [[1,1,1,1,1],[0,0,0,0,1],[0,0,0,1,0],[0,0,1,0,0],[0,1,0,0,0],[0,1,0,0,0],[0,1,0,0,0]],
             '8': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
             '9': [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,1],[0,0,0,0,1],[0,0,0,0,1],[0,1,1,1,0]],
+            '-': [[0,0],[0,0],[0,0],[1,1],[0,0],[0,0],[0,0]],  # Thin dash (2 pixels wide)
             ':': [[0,0,0,0,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,0,0,0]],
             ' ': [[0,0],[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]  # Thinner space (2 pixels wide)
         }
@@ -229,6 +241,23 @@ class MuniLTaravalDisplay:
                 total_width += 1
         return total_width
 
+    def truncate_text_to_fit(self, text, max_width):
+        """Truncate text to fit within the specified width."""
+        # Try the full text first
+        full_pixels = self.create_text_pixels(text)
+        if self.get_text_width(full_pixels) <= max_width:
+            return text
+
+        # If it doesn't fit, try progressively shorter versions
+        for i in range(len(text) - 1, 0, -1):
+            truncated = text[:i]
+            truncated_pixels = self.create_text_pixels(truncated)
+            if self.get_text_width(truncated_pixels) <= max_width:
+                return truncated
+
+        # If even a single character doesn't fit, return empty string
+        return ""
+
     def display_arrivals(self):
         """Display arrival information on the matrix."""
         arrivals = self.get_demo_data()  # Using demo data for now
@@ -241,14 +270,18 @@ class MuniLTaravalDisplay:
         if hasattr(self.controller, 'canvas') and self.controller.canvas:
             self.controller.clear()
             
-            # Header: "L-TARAVAL" in purple (official MUNI line color)
-            header_pixels = self.create_text_pixels("L-TARAVAL")
-            self.draw_text_pixels(header_pixels, 1, 2, self.line_color)
-
-            # Direction indicator in top right
+            # Direction indicator in top right (with 1 pixel margin from edge)
             direction_pixels = self.create_text_pixels(self.direction_display)
             direction_width = self.get_text_width(direction_pixels)
-            self.draw_text_pixels(direction_pixels, 64 - direction_width, 2, (255, 255, 255))
+            direction_x = 64 - direction_width - 1
+            self.draw_text_pixels(direction_pixels, direction_x, 2, (255, 255, 255))
+
+            # Header: Line name in official MUNI line color
+            # Calculate available space for header (leave 2 pixels gap between header and direction)
+            available_width = direction_x - 1 - 2  # Start at x=1, leave 2px gap before direction
+            header_text = self.truncate_text_to_fit(self.line_name, available_width)
+            header_pixels = self.create_text_pixels(header_text)
+            self.draw_text_pixels(header_pixels, 1, 2, self.line_color)
 
             # Arrival times
             y_pos = 12
@@ -309,11 +342,12 @@ class MuniLTaravalDisplay:
     
     def run_display(self):
         """Run the continuous MUNI display."""
-        print("🚇 MUNI L-Taraval Real-time Display")
+        print(f"🚇 MUNI {self.line_name} Real-time Display")
         print("=" * 40)
+        print(f"🚂 Line: {self.line_name} (ID: {self.line_id})")
         print(f"📍 Stop: {self.current_stop}")
         print(f"🧭 Direction: {self.direction} ({self.direction_display})")
-        print(f"🎨 Line Color: Purple RGB{self.line_color}")
+        print(f"🎨 Line Color: RGB{self.line_color}")
         print("🌐 Emulator URL: http://localhost:8888/")
         
         if self.api_key == "YOUR_511_API_KEY_HERE":
