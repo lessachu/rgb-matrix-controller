@@ -39,13 +39,19 @@ class MuniLTaravalDisplay:
         # Load line from config file, fallback to default
         config_line = self.config.get('LINE', 'L-Taraval')
         self.line_name = config_line
-        # Extract line ID (first character before space or dash)
-        if ' ' in config_line:
-            self.line_id = config_line.split(' ')[0]
-        elif '-' in config_line:
-            self.line_id = config_line.split('-')[0]
+
+        # Load line ID from config, or extract from line name
+        config_line_id = self.config.get('LINE_ID', '')
+        if config_line_id:
+            self.line_id = config_line_id
         else:
-            self.line_id = config_line[0] if config_line else "L"
+            # Extract line ID (first character before space or dash)
+            if ' ' in config_line:
+                self.line_id = config_line.split(' ')[0]
+            elif '-' in config_line:
+                self.line_id = config_line.split('-')[0]
+            else:
+                self.line_id = config_line[0] if config_line else "L"
 
         # MUNI Line Color Table (RGB values)
         self.muni_line_colors = {
@@ -110,8 +116,16 @@ class MuniLTaravalDisplay:
 
         # Load stop from config file, fallback to default
         config_stop_name = self.config.get('STOP_NAME', 'Taraval/17th')
-        self.current_stop = config_stop_name if config_stop_name in self.stops else "Taraval/17th"
-        self.current_stop_id = self.stops[self.current_stop]
+        config_stop_id = self.config.get('STOP_ID', '')
+
+        if config_stop_id:
+            # Use stop ID directly from config
+            self.stop_id = config_stop_id
+            self.current_stop = config_stop_name
+        else:
+            # Use stop name lookup (legacy method)
+            self.current_stop = config_stop_name if config_stop_name in self.stops else "Taraval/17th"
+            self.stop_id = self.stops[self.current_stop]
 
         # Load direction from config file, fallback to default
         config_direction = self.config.get('DIRECTION', 'Inbound')
@@ -192,7 +206,156 @@ class MuniLTaravalDisplay:
         print("   3. You'll receive your API key via email")
         print("   4. Set environment variable: export MUNI_API_KEY=your_key")
         print()
-    
+
+    def get_live_data(self):
+        """Fetch live arrival data from 511.org API."""
+        if not self.api_key:
+            print("❌ No API key available - falling back to demo data")
+            return self.get_demo_data()
+
+        try:
+            # 511.org API endpoint for real-time arrivals
+            url = "http://api.511.org/transit/StopMonitoring"
+
+            params = {
+                'api_key': self.api_key,
+                'agency': 'SF',  # San Francisco (MUNI)
+                'stopCode': self.stop_id,
+                'format': 'json'
+            }
+
+            if self.debug_mode:
+                print(f"🌐 Fetching live data from 511.org API...")
+                print(f"   Stop ID: {self.stop_id}")
+                print(f"   Agency: SF (MUNI)")
+
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+
+            # Handle UTF-8 BOM if present
+            response_text = response.text
+            if response_text.startswith('\ufeff'):
+                response_text = response_text[1:]  # Remove BOM
+
+            data = json.loads(response_text)
+
+            if self.debug_mode:
+                print(f"✅ API response received ({len(str(data))} chars)")
+                # Print first level of response structure for debugging
+                if isinstance(data, dict):
+                    print(f"🔍 Response keys: {list(data.keys())}")
+
+            # Parse the 511.org API response
+            arrivals = self.parse_511_response(data)
+
+            if arrivals:
+                if self.debug_mode:
+                    print(f"📊 Parsed {len(arrivals)} arrivals from live data")
+                return arrivals
+            else:
+                print("⚠️  No arrivals found in API response - using demo data")
+                return self.get_demo_data()
+
+        except requests.exceptions.Timeout:
+            print("⚠️  API request timed out - using demo data")
+            return self.get_demo_data()
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️  API request failed: {e} - using demo data")
+            return self.get_demo_data()
+        except json.JSONDecodeError as e:
+            print(f"⚠️  Invalid JSON response: {e} - using demo data")
+            return self.get_demo_data()
+        except Exception as e:
+            print(f"⚠️  Unexpected error: {e} - using demo data")
+            return self.get_demo_data()
+
+    def parse_511_response(self, data):
+        """Parse 511.org API response into our internal arrival format."""
+        arrivals = []
+
+        try:
+            service_delivery = data.get('ServiceDelivery', {})
+            stop_monitoring = service_delivery.get('StopMonitoringDelivery', [])
+
+            if not stop_monitoring:
+                if self.debug_mode:
+                    print("⚠️  No StopMonitoringDelivery in API response")
+                    print(f"🔍 ServiceDelivery keys: {list(service_delivery.keys())}")
+                return arrivals
+
+            # Get the first (and usually only) stop monitoring delivery
+            delivery = stop_monitoring[0] if isinstance(stop_monitoring, list) else stop_monitoring
+            monitored_calls = delivery.get('MonitoredStopVisit', [])
+
+            if not monitored_calls:
+                if self.debug_mode:
+                    print("⚠️  No MonitoredStopVisit in API response")
+                    print(f"🔍 Delivery keys: {list(delivery.keys())}")
+                return arrivals
+
+            if self.debug_mode:
+                print(f"🔍 Found {len(monitored_calls)} monitored calls")
+
+            for call in monitored_calls:
+                try:
+                    journey = call.get('MonitoredVehicleJourney', {})
+                    line_ref = journey.get('LineRef', '')
+                    direction_ref = journey.get('DirectionRef', '')
+
+                    # Debug: Show what we're getting vs what we're looking for
+                    if self.debug_mode:
+                        print(f"🔍 Found: Line={line_ref}, Direction={direction_ref} (looking for Line={self.line_id}, Direction={self.direction})")
+
+                    # Map direction to API format (Inbound -> IB, Outbound -> OB)
+                    api_direction = "IB" if self.direction.lower() == "inbound" else "OB"
+
+                    # Filter for our specific line and direction
+                    if (line_ref == self.line_id and
+                        direction_ref == api_direction):
+
+                        monitored_call = journey.get('MonitoredCall', {})
+
+                        # Get arrival time
+                        expected_arrival = monitored_call.get('ExpectedArrivalTime')
+                        aimed_arrival = monitored_call.get('AimedArrivalTime')
+
+                        arrival_time_str = expected_arrival or aimed_arrival
+
+                        if arrival_time_str:
+                            # Parse ISO 8601 timestamp
+                            arrival_time = datetime.fromisoformat(arrival_time_str.replace('Z', '+00:00'))
+
+                            # Convert to local time and calculate minutes
+                            now = datetime.now(arrival_time.tzinfo)
+                            minutes_until = int((arrival_time - now).total_seconds() / 60)
+
+                            if minutes_until >= 0:  # Only future arrivals
+                                arrivals.append({
+                                    'minutes': minutes_until,
+                                    'destination': journey.get('DestinationName', 'Unknown'),
+                                    'vehicle_id': journey.get('VehicleRef', ''),
+                                    'line': line_ref,
+                                    'direction': direction_ref
+                                })
+
+                except Exception as e:
+                    if self.debug_mode:
+                        print(f"⚠️  Error parsing arrival: {e}")
+                    continue
+
+            # Sort by arrival time
+            arrivals.sort(key=lambda x: x['minutes'])
+
+            if self.debug_mode and arrivals:
+                arrival_times = [f"{a['minutes']}min" for a in arrivals[:3]]
+                print(f"📋 Live arrivals: {arrival_times}")
+
+        except Exception as e:
+            if self.debug_mode:
+                print(f"⚠️  Error parsing 511 response: {e}")
+
+        return arrivals
+
     def get_demo_data(self):
         """Generate demo arrival data for testing."""
         now = datetime.now()
@@ -564,7 +727,7 @@ class MuniLTaravalDisplay:
             if self.test_mode:
                 arrivals = self.get_test_data()
             else:
-                arrivals = self.get_demo_data()  # Using demo data for now
+                arrivals = self.get_live_data()  # Now using live 511.org API data!
 
             # Check if this is new data (different from current) or initial load
             is_new_data = arrivals != self.current_arrivals
