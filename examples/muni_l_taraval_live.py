@@ -204,7 +204,8 @@ class MuniLTaravalDisplay:
         print("   1. Go to: https://511.org/open-data/token")
         print("   2. Fill out the form (it's free!)")
         print("   3. You'll receive your API key via email")
-        print("   4. Set environment variable: export MUNI_API_KEY=your_key")
+        print("   4. Add to examples/muni.config: MUNI_API_KEY=your_key")
+        print("   5. Or set environment variable: export MUNI_API_KEY=your_key")
         print()
 
     def get_live_data(self):
@@ -983,22 +984,29 @@ class MuniLTaravalDisplay:
 
 def main():
     """Run the MUNI L-Taraval display."""
-    # Load API key from environment variable, config file, or use default
+    # Load API key from config file first, then environment variable, or use default
     config_file = "examples/muni.config"
-    api_key = os.environ.get('MUNI_API_KEY')
+    api_key = None
 
-    # If no environment variable, try to load from config file
-    if not api_key or api_key == 'YOUR_511_API_KEY_HERE':
-        try:
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith('MUNI_API_KEY='):
-                            api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
+    # First, try to load from config file
+    try:
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('MUNI_API_KEY='):
+                        api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
+                        if api_key and api_key != 'YOUR_511_API_KEY_HERE':
                             break
-        except Exception as e:
-            print(f"⚠️  Error reading API key from config: {e}")
+                        api_key = None  # Reset if placeholder value
+    except Exception as e:
+        print(f"⚠️  Error reading API key from config: {e}")
+
+    # If no valid key from config file, try environment variable
+    if not api_key:
+        env_key = os.environ.get('MUNI_API_KEY')
+        if env_key and env_key != 'YOUR_511_API_KEY_HERE':
+            api_key = env_key
 
     # Fallback to default if still not found
     if not api_key:

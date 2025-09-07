@@ -1,0 +1,23 @@
+# MUNI L-Taraval Live Display Configuration
+# Copy this file to muni.config and update with your settings
+
+# 511.org API Key (required for live data)
+# Get your free API key at: https://511.org/open-data/token
+MUNI_API_KEY=YOUR_511_API_KEY_HERE
+
+# Display Configuration
+LINE=L-Taraval
+LINE_ID=L
+STOP_NAME="Taraval/17th Ave"
+STOP_ID=16615
+DIRECTION=Inbound
+
+# Test Mode (set to 'true' to use muni_test.txt data)
+TEST_MODE=false
+MAX_ARRIVALS=3
+# 511.org rate limit: 60 requests/hour = 1 request/minute minimum
+UPDATE_INTERVAL=60
+TEST_UPDATE_INTERVAL=30
+
+# Debug Mode (set to 'true' for verbose output)
+DEBUG_MODE=true
