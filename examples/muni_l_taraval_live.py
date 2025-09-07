@@ -125,7 +125,6 @@ class MuniLTaravalDisplay:
         self.animation_total_frames = 120  # Total frames for animation (6 seconds at 20fps)
         self.animation_phase = "entering"  # "exiting" or "entering"
         self.current_arrivals = []  # Track current arrivals to detect changes
-        self.start_time = time.time()  # Track startup time for test trigger
         self.old_arrival_text = ""  # Store old arrival text for exit animation
 
         # Test mode configuration
@@ -154,6 +153,11 @@ class MuniLTaravalDisplay:
 
         # Store old arrival info for exit animation
         self.old_arrival_color = (255, 255, 0)  # Default yellow
+
+        # Track previous animation positions for selective clearing
+        self.prev_train_x = None
+        self.prev_text_x = None
+        self.prev_text_width = None
 
     def _load_config(self, config_file):
         """Load configuration from muni.config file."""
@@ -434,6 +438,33 @@ class MuniLTaravalDisplay:
                             color[0], color[1], color[2]
                         )
 
+    def clear_animation_area(self):
+        """Selectively clear only the animation area and countdown timer to reduce flashing."""
+        if hasattr(self.controller, 'canvas') and self.controller.canvas:
+            # Clear the animation strip (where train and text move)
+            animation_y_start = 12  # Start of animation area
+            animation_y_end = 20    # End of animation area (train is 8 pixels tall)
+
+            for y in range(animation_y_start, animation_y_end):
+                for x in range(64):  # Full width
+                    self.controller.canvas.SetPixel(x, y, 0, 0, 0)  # Set to black
+
+            # Also clear the countdown timer area (bottom right)
+            # Countdown is at y=25, and text is 7 pixels tall
+            countdown_y_start = 25
+            countdown_y_end = 32    # Bottom of display
+
+            for y in range(countdown_y_start, countdown_y_end):
+                for x in range(64):  # Full width to clear any previous countdown text
+                    self.controller.canvas.SetPixel(x, y, 0, 0, 0)  # Set to black
+
+    def redraw_static_elements(self):
+        """Redraw static elements that might overlap with the animation area."""
+        # The animation area is y=12-20, so we need to redraw any static elements in that range
+        # In our case, the header and direction are at y=2, and countdown is at y=25+
+        # So no static elements overlap with the animation area - this method can be empty for now
+        pass
+
     def draw_animated_train_update(self):
         """Draw the animated train towing arrival times across the screen."""
         if self.animation_phase == "exiting":
@@ -565,30 +596,25 @@ class MuniLTaravalDisplay:
             is_new_data = False
             is_initial_load = False
 
-        # Test trigger: Force animation 30 seconds after startup
-        current_time = time.time()
-        is_test_trigger = (current_time - self.start_time > 29 and
-                          current_time - self.start_time < 35 and
-                          not self.animation_active)
-
-        # Debug: Print timing info
-        if current_time - self.start_time > 29 and current_time - self.start_time < 35:
-            print(f"🕐 Debug: {current_time - self.start_time:.1f}s since startup, test_trigger={is_test_trigger}")
-
         if not arrivals:
             self.display_no_data()
             return
 
-        # Start animation for new data, initial load, or test trigger
+        # Start animation for new data or initial load
         if (is_new_data or is_initial_load) and not self.animation_active:
             self.start_update_animation(is_initial_load=is_initial_load)
-        elif is_test_trigger:
-            print("🧪 Test trigger: Starting animation 30 seconds after startup!")
-            self.start_update_animation(is_initial_load=False)
         
         # Display format: "L-TARAVAL  3min  8min  15min"
         if hasattr(self.controller, 'canvas') and self.controller.canvas:
-            self.controller.clear()
+            # Use selective clearing during animation to reduce flashing
+            if self.animation_active:
+                # Only clear the animation area during animation
+                self.clear_animation_area()
+                # Redraw static elements that might be in the animation area
+                self.redraw_static_elements()
+            else:
+                # Full clear when not animating (less frequent)
+                self.controller.clear()
             
             # Direction indicator in top right (with 1 pixel margin from edge)
             direction_pixels = self.create_text_pixels(self.direction_display)
