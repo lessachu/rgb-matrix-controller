@@ -1,0 +1,29 @@
+# MUNI Test Data File
+# Format: JSON responses matching 511.org API format
+# Lines starting with # are comments
+# Each JSON object should be on a single line
+# The system will cycle through these responses for testing
+
+# Initial load - normal arrival data
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:30:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:33:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:38:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:45:00Z"}}}]}]}}
+
+# Update 1 - train approaching (1 minute)
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:31:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:32:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:38:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:45:00Z"}}}]}]}}
+
+# Update 2 - train arriving now
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:32:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:32:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:38:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:45:00Z"}}}]}]}}
+
+# Update 3 - next train becomes primary
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:33:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:38:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:45:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:52:00Z"}}}]}]}}
+
+# Update 4 - longer wait time (15 minutes)
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:34:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:49:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:56:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T11:03:00Z"}}}]}]}}
+
+# Error response - no data
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:35:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[]}]}}
+
+# Update 5 - service restored with medium wait
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:36:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:42:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:49:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:56:00Z"}}}]}]}}
+
+# Repeat cycle - back to initial data
+{"ServiceDelivery":{"ResponseTimestamp":"2025-01-07T10:37:00Z","StopMonitoringDelivery":[{"MonitoredStopVisit":[{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:40:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:45:00Z"}}},{"MonitoredVehicleJourney":{"LineRef":"L","DirectionRef":"1","DestinationName":"Embarcadero","MonitoredCall":{"ExpectedArrivalTime":"2025-01-07T10:52:00Z"}}}]}]}}
