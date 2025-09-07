@@ -258,6 +258,46 @@ class MuniLTaravalDisplay:
         # If even a single character doesn't fit, return empty string
         return ""
 
+    def draw_train_image(self, x, y):
+        """Draw a pixel art MUNI train car facing left with classic grey/red colors."""
+        # MUNI train car (16x8 pixels) - facing left
+        # 0 = empty, 1 = grey body, 2 = red stripe, 3 = black windows
+        train_pattern = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 0
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],  # Row 1 - Top of car (grey)
+            [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],  # Row 2 - Car body (grey) with red left edge
+            [2,3,1,1,3,3,1,3,3,1,3,3,1,3,3,0],  # Row 3 - Windows (narrow front window, bigger passenger windows)
+            [2,3,1,1,3,3,1,3,3,1,3,3,1,3,3,0],  # Row 4 - Windows (narrow front window, bigger passenger windows)
+            [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0],  # Row 5 - Red stripe (within car body)
+            [0,1,0,0,1,1,1,1,1,1,1,1,0,0,1,0],  # Row 6 - Bottom with wheels (grey)
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  # Row 7
+        ]
+
+        # MUNI colors
+        grey_color = (160, 160, 160)    # Light grey for train body
+        red_color = (220, 20, 60)       # MUNI red stripe
+        black_color = (0, 0, 0)         # Black windows
+
+        # Draw the train with appropriate colors
+        for row in range(len(train_pattern)):
+            for col in range(len(train_pattern[row])):
+                pixel_value = train_pattern[row][col]
+                if pixel_value > 0:
+                    pixel_x = x + col
+                    pixel_y = y + row
+                    if 0 <= pixel_x < 64 and 0 <= pixel_y < 32:
+                        if pixel_value == 1:  # Grey body
+                            color = grey_color
+                        elif pixel_value == 2:  # Red stripe
+                            color = red_color
+                        elif pixel_value == 3:  # Black windows
+                            color = black_color
+
+                        self.controller.canvas.SetPixel(
+                            pixel_x, pixel_y,
+                            color[0], color[1], color[2]
+                        )
+
     def display_arrivals(self):
         """Display arrival information on the matrix."""
         arrivals = self.get_demo_data()  # Using demo data for now
@@ -302,12 +342,15 @@ class MuniLTaravalDisplay:
                 if x_pos + text_width <= 64:  # Make sure it fits
                     self.draw_text_pixels(text_pixels, x_pos, y_pos, colors[i])
             
+            # MUNI train image in bottom area
+            self.draw_train_image(24, 18)  # Centered horizontally, bottom area
+
             # Update timestamp at bottom
             if self.last_update:
                 update_text = f"UPD {self.last_update.strftime('%H:%M')}"
                 update_pixels = self.create_text_pixels(update_text)
                 self.draw_text_pixels(update_pixels, 1, 25, (100, 100, 100))
-            
+
             self.controller.canvas = self.controller.matrix.SwapOnVSync(self.controller.canvas)
     
     def draw_text_pixels(self, text_pixels, start_x, start_y, color):
